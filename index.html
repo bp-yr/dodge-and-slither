@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slither Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            border: 2px solid #333;
+            display: block;
+            max-width: 100vw;
+            max-height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="720" height="540"></canvas>
+
+    <script>
+        // Constants
+        const WINDOW_WIDTH = 720;
+        const WINDOW_HEIGHT = 540;
+        const GRID_SIZE = 20;
+        const GRID_WIDTH = WINDOW_WIDTH / GRID_SIZE;
+        const GRID_HEIGHT = WINDOW_HEIGHT / GRID_SIZE;
+
+        // Colors
+        const BLACK = '#000000';
+        const WHITE = '#FFFFFF';
+        const RED = '#FF0000';
+        const GREEN = '#00FF00';
+        const BLUE = '#0000FF';
+        const YELLOW = '#FFFF00';
+        const GRAY = '#808080';
+        const DARK_GRAY = '#404040';
+
+        // Game states
+        const MENU = 0;
+        const PLAYING = 1;
+        const GAME_OVER = 2;
+
+        class Snake {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.length = 3;
+                this.positions = [[Math.floor(GRID_WIDTH / 2), Math.floor(GRID_HEIGHT / 2)]];
+                this.direction = [1, 0]; // Right
+                this.grow = false;
+            }
+
+            getHeadPosition() {
+                return this.positions[0];
+            }
+
+            update() {
+                const cur = this.getHeadPosition();
+                const [x, y] = this.direction;
+                const newPos = [cur[0] + x, cur[1] + y];
+
+                // Check if snake hits wall
+                if (newPos[0] < 0 || newPos[0] >= GRID_WIDTH || newPos[1] < 0 || newPos[1] >= GRID_HEIGHT) {
+                    return false; // Hit wall
+                }
+
+                // Check if snake hits itself
+                for (let i = 1; i < this.positions.length; i++) {
+                    if (newPos[0] === this.positions[i][0] && newPos[1] === this.positions[i][1]) {
+                        return false; // Hit itself
+                    }
+                }
+
+                this.positions.unshift(newPos);
+
+                if (!this.grow) {
+                    this.positions.pop();
+                } else {
+                    this.grow = false;
+                    this.length++;
+                }
+
+                return true;
+            }
+
+            checkWallCollision() {
+                const head = this.getHeadPosition();
+                const x = head[0];
+                const y = head[1];
+
+                if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) {
+                    return true;
+                }
+                return false;
+            }
+
+            render(ctx) {
+                for (const p of this.positions) {
+                    const x = p[0] * GRID_SIZE;
+                    const y = p[1] * GRID_SIZE;
+                    ctx.fillStyle = GREEN;
+                    ctx.fillRect(x, y, GRID_SIZE, GRID_SIZE);
+                    ctx.strokeStyle = WHITE;
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(x, y, GRID_SIZE, GRID_SIZE);
+                }
+            }
+        }
+
+        class Food {
+            constructor() {
+                this.position = [0, 0];
+                this.randomizePosition();
+            }
+
+            randomizePosition() {
+                this.position = [
+                    Math.floor(Math.random() * GRID_WIDTH),
+                    Math.floor(Math.random() * GRID_HEIGHT)
+                ];
+            }
+
+            render(ctx) {
+                const x = this.position[0] * GRID_SIZE;
+                const y = this.position[1] * GRID_SIZE;
+                ctx.fillStyle = RED;
+                ctx.beginPath();
+                ctx.ellipse(x + GRID_SIZE / 2, y + GRID_SIZE / 2, GRID_SIZE / 2, GRID_SIZE / 2, 0, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        }
+
+        class BouncingBall {
+            constructor() {
+                this.radius = 15;
+                this.x = Math.random() * (WINDOW_WIDTH - 2 * this.radius) + this.radius;
+                this.y = Math.random() * (WINDOW_HEIGHT - 2 * this.radius) + this.radius;
+                // Make balls slightly slower than snake
+                const speeds = [-1.75, -1.5, -1.25, 1.25, 1.5, 1.75];
+                this.dx = speeds[Math.floor(Math.random() * speeds.length)];
+                this.dy = speeds[Math.floor(Math.random() * speeds.length)];
+            }
+
+            update() {
+                this.x += this.dx;
+                this.y += this.dy;
+
+                // Bounce off walls with random direction
+                if (this.x - this.radius <= 0 || this.x + this.radius >= WINDOW_WIDTH) {
+                    // Random direction when hitting left/right walls
+                    const speeds = [-1.75, -1.5, -1.25, 1.25, 1.5, 1.75];
+                    this.dx = speeds[Math.floor(Math.random() * speeds.length)];
+                    this.dy = speeds[Math.floor(Math.random() * speeds.length)];
+                }
+                if (this.y - this.radius <= 0 || this.y + this.radius >= WINDOW_HEIGHT) {
+                    // Random direction when hitting top/bottom walls
+                    const speeds = [-1.75, -1.5, -1.25, 1.25, 1.5, 1.75];
+                    this.dx = speeds[Math.floor(Math.random() * speeds.length)];
+                    this.dy = speeds[Math.floor(Math.random() * speeds.length)];
+                }
+
+                // Keep within bounds
+                this.x = Math.max(this.radius, Math.min(WINDOW_WIDTH - this.radius, this.x));
+                this.y = Math.max(this.radius, Math.min(WINDOW_HEIGHT - this.radius, this.y));
+            }
+
+            render(ctx) {
+                ctx.fillStyle = BLUE;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.strokeStyle = WHITE;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            checkCollision(snake) {
+                const head = snake.getHeadPosition();
+                const headX = head[0] * GRID_SIZE + GRID_SIZE / 2;
+                const headY = head[1] * GRID_SIZE + GRID_SIZE / 2;
+
+                const distance = Math.sqrt((headX - this.x) ** 2 + (headY - this.y) ** 2);
+                return distance < (GRID_SIZE / 2 + this.radius);
+            }
+        }
+
+        class OrangeSquare {
+            constructor() {
+                this.randomizePosition();
+            }
+
+            randomizePosition() {
+                this.position = [
+                    Math.floor(Math.random() * GRID_WIDTH),
+                    Math.floor(Math.random() * GRID_HEIGHT)
+                ];
+            }
+
+            render(ctx) {
+                const x = this.position[0] * GRID_SIZE;
+                const y = this.position[1] * GRID_SIZE;
+                ctx.fillStyle = '#FF8C00'; // Orange color
+                ctx.fillRect(x, y, GRID_SIZE, GRID_SIZE);
+                ctx.strokeStyle = '#FFA500';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x, y, GRID_SIZE, GRID_SIZE);
+            }
+
+            checkCollision(snake) {
+                const head = snake.getHeadPosition();
+                return head[0] === this.position[0] && head[1] === this.position[1];
+            }
+        }
+
+        class Game {
+            constructor() {
+                const canvas = document.getElementById('gameCanvas');
+                this.ctx = canvas.getContext('2d');
+                this.state = MENU;
+                this.difficulty = null;
+                this.snake = new Snake();
+                this.food = new Food();
+                this.balls = [];
+                this.orangeSquares = [];
+                this.score = 0;
+                this.lives = 3;
+                this.highScore = this.loadHighScore();
+                this.lastTime = 0;
+                this.gameSpeed = 150; // milliseconds (slower than before but not too slow)
+                this.lastOrangeSquareScore = 0;
+
+                // Event listeners
+                canvas.addEventListener('click', (e) => this.handleClick(e));
+                window.addEventListener('keydown', (e) => this.handleKeyDown(e));
+
+                // Start game loop
+                this.gameLoop(0);
+            }
+
+            loadHighScore() {
+                const saved = localStorage.getItem('slitherHighScore');
+                return saved ? parseInt(saved, 10) : 0;
+            }
+
+            saveHighScore() {
+                localStorage.setItem('slitherHighScore', this.highScore.toString());
+            }
+
+            startGame(difficulty) {
+                this.difficulty = difficulty;
+                this.state = PLAYING;
+                this.snake.reset();
+                this.food.randomizePosition();
+                this.score = 0;
+                this.lives = 3;
+                this.lastOrangeSquareScore = 0;
+
+                // Create bouncing balls based on difficulty
+                this.balls = [];
+                for (let i = 0; i < difficulty; i++) {
+                    this.balls.push(new BouncingBall());
+                }
+
+                // Start with one orange square
+                this.orangeSquares = [];
+                const initialSquare = new OrangeSquare();
+                // Make sure it doesn't spawn on snake or food
+                while (this.snake.positions.some(p => p[0] === initialSquare.position[0] && p[1] === initialSquare.position[1]) ||
+                       (initialSquare.position[0] === this.food.position[0] && initialSquare.position[1] === this.food.position[1])) {
+                    initialSquare.randomizePosition();
+                }
+                this.orangeSquares.push(initialSquare);
+            }
+
+            handleClick(e) {
+                if (this.state !== MENU) return;
+
+                const rect = this.ctx.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const buttonWidth = 200;
+                const buttonHeight = 60;
+                const startY = WINDOW_HEIGHT / 2 - 100;
+                const centerX = WINDOW_WIDTH / 2;
+
+                if (x >= centerX - buttonWidth / 2 && x <= centerX + buttonWidth / 2) {
+                    if (y >= startY && y <= startY + buttonHeight) {
+                        this.startGame(1); // Easy: 1 ball
+                    } else if (y >= startY + 80 && y <= startY + 80 + buttonHeight) {
+                        this.startGame(2); // Medium: 2 balls
+                    } else if (y >= startY + 160 && y <= startY + 160 + buttonHeight) {
+                        this.startGame(3); // Hard: 3 balls
+                    }
+                }
+            }
+
+            handleKeyDown(e) {
+                if (this.state === PLAYING) {
+                    const dir = this.snake.direction;
+                    if (e.key === 'ArrowUp' && dir[1] !== 1) {
+                        this.snake.direction = [0, -1];
+                    } else if (e.key === 'ArrowDown' && dir[1] !== -1) {
+                        this.snake.direction = [0, 1];
+                    } else if (e.key === 'ArrowLeft' && dir[0] !== 1) {
+                        this.snake.direction = [-1, 0];
+                    } else if (e.key === 'ArrowRight' && dir[0] !== -1) {
+                        this.snake.direction = [1, 0];
+                    }
+                } else if (this.state === GAME_OVER && e.key === ' ') {
+                    this.state = MENU;
+                }
+            }
+
+            renderMenu() {
+                this.ctx.fillStyle = BLACK;
+                this.ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+                // Instructions (above title)
+                this.ctx.font = '24px Arial';
+                this.ctx.fillStyle = YELLOW;
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('Don\'t touch the side of the screen!', WINDOW_WIDTH / 2, 60);
+                this.ctx.fillText('Don\'t touch the balls!', WINDOW_WIDTH / 2, 90);
+                this.ctx.fillText('Don\'t touch the orange blocks!', WINDOW_WIDTH / 2, 120);
+
+                // Title
+                this.ctx.fillStyle = WHITE;
+                this.ctx.font = '48px Arial';
+                this.ctx.fillText('SLITHER', WINDOW_WIDTH / 2, 180);
+
+                // Buttons
+                const buttonWidth = 200;
+                const buttonHeight = 60;
+                const startY = WINDOW_HEIGHT / 2 - 50;
+                const centerX = WINDOW_WIDTH / 2;
+
+                const buttons = ['Easy', 'Medium', 'Hard'];
+                this.ctx.font = '36px Arial';
+                for (let i = 0; i < buttons.length; i++) {
+                    const y = startY + i * 80;
+                    this.ctx.fillStyle = DARK_GRAY;
+                    this.ctx.fillRect(centerX - buttonWidth / 2, y, buttonWidth, buttonHeight);
+                    this.ctx.strokeStyle = WHITE;
+                    this.ctx.lineWidth = 2;
+                    this.ctx.strokeRect(centerX - buttonWidth / 2, y, buttonWidth, buttonHeight);
+
+                    this.ctx.fillStyle = WHITE;
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText(buttons[i], centerX, y + buttonHeight / 2 + 12);
+                }
+            }
+
+            renderHearts() {
+                const spacing = 35;
+                const startX = 20;
+                const y = 25;
+
+                this.ctx.font = '30px Arial';
+                this.ctx.textAlign = 'left';
+                this.ctx.fillStyle = RED;
+                
+                // Only render hearts for remaining lives
+                for (let i = 0; i < this.lives; i++) {
+                    const x = startX + i * spacing;
+                    this.ctx.fillText('❤️', x, y);
+                }
+            }
+
+            renderHighScore() {
+                // Trophy emoji
+                this.ctx.font = '24px Arial';
+                this.ctx.fillStyle = YELLOW;
+                this.ctx.textAlign = 'left';
+                this.ctx.fillText('🏆', WINDOW_WIDTH - 180, 30);
+                this.ctx.fillText(`High: ${this.highScore}`, WINDOW_WIDTH - 150, 30);
+            }
+
+            renderGameOver() {
+                this.ctx.fillStyle = BLACK;
+                this.ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+                // Game Over text
+                this.ctx.fillStyle = RED;
+                this.ctx.font = '48px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('GAME OVER', WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 - 100);
+
+                // Final score
+                this.ctx.fillStyle = WHITE;
+                this.ctx.font = '36px Arial';
+                this.ctx.fillText(`Final Score: ${this.score}`, WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
+
+                // High score
+                if (this.score === this.highScore && this.score > 0) {
+                    this.ctx.fillStyle = YELLOW;
+                    this.ctx.fillText('NEW HIGH SCORE!', WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 + 50);
+                }
+
+                // Instructions
+                this.ctx.fillStyle = GRAY;
+                this.ctx.font = '24px Arial';
+                this.ctx.fillText('Press SPACE to return to menu', WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 + 150);
+            }
+
+            update() {
+                if (this.state === PLAYING) {
+                    // Update snake (now handles wall collision internally)
+                    if (!this.snake.update()) {
+                        this.loseLife();
+                        return;
+                    }
+
+                    // Check food collision
+                    const head = this.snake.getHeadPosition();
+                    if (head[0] === this.food.position[0] && head[1] === this.food.position[1]) {
+                        this.snake.grow = true;
+                        this.score++;
+                        this.food.randomizePosition();
+                        // Make sure food doesn't spawn on snake or orange squares
+                        while (this.snake.positions.some(p => p[0] === this.food.position[0] && p[1] === this.food.position[1]) ||
+                               this.orangeSquares.some(sq => sq.position[0] === this.food.position[0] && sq.position[1] === this.food.position[1])) {
+                            this.food.randomizePosition();
+                        }
+                        
+                        // Add new orange square based on score and difficulty
+                        let interval;
+                        if (this.difficulty === 1) {
+                            interval = 7; // Easy: every 7 points
+                        } else if (this.difficulty === 2) {
+                            interval = 6; // Medium: every 6 points (assuming based on pattern)
+                        } else {
+                            interval = 5; // Hard: every 5 points
+                        }
+                        
+                        if (this.score > 0 && this.score % interval === 0 && this.score !== this.lastOrangeSquareScore) {
+                            const newSquare = new OrangeSquare();
+                            // Make sure it doesn't spawn on snake, food, or other orange squares
+                            while (this.snake.positions.some(p => p[0] === newSquare.position[0] && p[1] === newSquare.position[1]) ||
+                                   (newSquare.position[0] === this.food.position[0] && newSquare.position[1] === this.food.position[1]) ||
+                                   this.orangeSquares.some(sq => sq.position[0] === newSquare.position[0] && sq.position[1] === newSquare.position[1])) {
+                                newSquare.randomizePosition();
+                            }
+                            this.orangeSquares.push(newSquare);
+                            this.lastOrangeSquareScore = this.score;
+                        }
+                    }
+
+                    // Check orange square collisions
+                    for (const square of this.orangeSquares) {
+                        if (square.checkCollision(this.snake)) {
+                            this.loseLife();
+                            return;
+                        }
+                    }
+
+                    // Check bouncing ball collisions (balls are updated in gameLoop)
+                    for (const ball of this.balls) {
+                        if (ball.checkCollision(this.snake)) {
+                            this.loseLife();
+                            return;
+                        }
+                    }
+                }
+            }
+
+            loseLife() {
+                this.lives--;
+                if (this.lives <= 0) {
+                    // Game over
+                    if (this.score > this.highScore) {
+                        this.highScore = this.score;
+                        this.saveHighScore();
+                    }
+                    this.state = GAME_OVER;
+                } else {
+                    // Reset snake position but keep length and score
+                    const savedLength = this.snake.positions.length;
+                    const savedDirection = [...this.snake.direction];
+                    
+                    // Reset to center
+                    this.snake.positions = [[Math.floor(GRID_WIDTH / 2), Math.floor(GRID_HEIGHT / 2)]];
+                    this.snake.direction = [1, 0]; // Right
+                    this.snake.grow = false;
+                    
+                    // Restore the length by adding segments in the opposite direction
+                    for (let i = 1; i < savedLength; i++) {
+                        const lastSegment = this.snake.positions[this.snake.positions.length - 1];
+                        // Add segment behind the current tail
+                        const newSegment = [
+                            lastSegment[0] - savedDirection[0],
+                            lastSegment[1] - savedDirection[1]
+                        ];
+                        this.snake.positions.push(newSegment);
+                    }
+                    this.snake.length = savedLength;
+                    
+                    // Reset food position
+                    this.food.randomizePosition();
+                    while (this.snake.positions.some(p => p[0] === this.food.position[0] && p[1] === this.food.position[1]) ||
+                           this.orangeSquares.some(sq => sq.position[0] === this.food.position[0] && sq.position[1] === this.food.position[1])) {
+                        this.food.randomizePosition();
+                    }
+                }
+            }
+
+            renderGrid() {
+                this.ctx.strokeStyle = GRAY;
+                this.ctx.lineWidth = 0.5;
+                
+                // Draw vertical lines
+                for (let x = 0; x <= GRID_WIDTH; x++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x * GRID_SIZE, 0);
+                    this.ctx.lineTo(x * GRID_SIZE, WINDOW_HEIGHT);
+                    this.ctx.stroke();
+                }
+                
+                // Draw horizontal lines
+                for (let y = 0; y <= GRID_HEIGHT; y++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, y * GRID_SIZE);
+                    this.ctx.lineTo(WINDOW_WIDTH, y * GRID_SIZE);
+                    this.ctx.stroke();
+                }
+            }
+
+            render() {
+                if (this.state === MENU) {
+                    this.renderMenu();
+                } else if (this.state === PLAYING) {
+                    this.ctx.fillStyle = BLACK;
+                    this.ctx.fillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+                    
+                    // Render grid
+                    this.renderGrid();
+                    
+                    // Render orange squares
+                    for (const square of this.orangeSquares) {
+                        square.render(this.ctx);
+                    }
+                    
+                    this.snake.render(this.ctx);
+                    this.food.render(this.ctx);
+                    for (const ball of this.balls) {
+                        ball.render(this.ctx);
+                    }
+
+                    // Render UI
+                    this.renderHearts();
+                    this.renderHighScore();
+
+                    // Score
+                    this.ctx.fillStyle = WHITE;
+                    this.ctx.font = '36px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText(`Score: ${this.score}`, WINDOW_WIDTH / 2, 30);
+                } else if (this.state === GAME_OVER) {
+                    this.renderGameOver();
+                }
+            }
+
+            gameLoop(currentTime) {
+                if (this.state === PLAYING) {
+                    // Update balls every frame for smooth, fast movement
+                    for (const ball of this.balls) {
+                        ball.update();
+                    }
+                    
+                    // Update snake at game speed
+                    if (this.lastTime === 0) {
+                        this.lastTime = currentTime;
+                    }
+                    if (currentTime - this.lastTime >= this.gameSpeed) {
+                        this.update();
+                        this.lastTime = currentTime;
+                    }
+                } else {
+                    this.lastTime = 0; // Reset when not playing
+                }
+
+                this.render();
+                requestAnimationFrame((time) => this.gameLoop(time));
+            }
+        }
+
+        // Start the game when page loads
+        window.addEventListener('load', () => {
+            new Game();
+        });
+    </script>
+</body>
+</html>
+
